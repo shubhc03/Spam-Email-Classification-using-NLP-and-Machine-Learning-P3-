@@ -1,0 +1,103 @@
+# Importing required libraries
+import pandas as pd
+import re
+import nltk
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    accuracy_score, confusion_matrix, classification_report, precision_recall_curve, auc
+)
+from nltk.corpus import stopwords
+from nltk.stem import PorterStemmer
+
+# Download NLTK resources
+nltk.download('stopwords')
+
+# Load the dataset
+df = pd.read_csv('new_emails.csv')
+
+# Text Preprocessing Function
+def preprocess_text(text):
+    text = re.sub(r'[^a-zA-Z]', ' ', text)
+    text = text.lower()
+    words = text.split()
+    ps = PorterStemmer()
+    words = [ps.stem(word) for word in words if word not in stopwords.words('english')]
+    return ' '.join(words)
+
+# Apply Preprocessing
+df['text'] = df['text'].apply(preprocess_text)
+
+# Split the Data
+X = df['text']
+y = df['label']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Convert Text Data to Numerical Vectors
+vectorizer = TfidfVectorizer(max_features=5000)
+X_train_tfidf = vectorizer.fit_transform(X_train)
+X_test_tfidf = vectorizer.transform(X_test)
+
+# Train the Logistic Regression Model
+model = LogisticRegression()
+model.fit(X_train_tfidf, y_train)
+
+# Predictions and Evaluation
+y_pred = model.predict(X_test_tfidf)
+
+# Evaluate the Model
+accuracy = accuracy_score(y_test, y_pred)
+conf_matrix = confusion_matrix(y_test, y_pred)
+class_report = classification_report(y_test, y_pred)
+
+# Print the Results
+print(f'Accuracy: {accuracy * 100:.2f}%')
+print(f'Confusion Matrix:\n{conf_matrix}')
+print(f'Classification Report:\n{class_report}')
+
+# *Plot 1: Confusion Matrix*
+plt.figure(figsize=(6, 6))
+sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=['Not Spam', 'Spam'], yticklabels=['Not Spam', 'Spam'])
+plt.xlabel('Predicted')
+plt.ylabel('Actual')
+plt.title('Confusion Matrix')
+plt.show()
+
+# *Plot 2: Accuracy vs. F1-Score*
+accuracies = [accuracy]
+f1_score = classification_report(y_test, y_pred, output_dict=True)['weighted avg']['f1-score']
+
+# Plot Accuracy and F1-Score Comparison
+plt.figure(figsize=(8, 5))
+plt.bar(['Accuracy', 'F1-Score'], [accuracies[0], f1_score], color=['green', 'blue'])
+plt.title('Model Performance Metrics: Accuracy vs. F1-Score')
+plt.ylabel('Score')
+plt.ylim(0, 1)
+plt.show()
+
+# *Plot 3: Precision-Recall Curve*
+precision, recall, _ = precision_recall_curve(y_test, model.predict_proba(X_test_tfidf)[:, 1])
+auc_score = auc(recall, precision)
+
+plt.figure(figsize=(8, 6))
+plt.plot(recall, precision, color='blue', label=f'Precision-Recall curve (AUC = {auc_score:.2f})')
+plt.xlabel('Recall')
+plt.ylabel('Precision')
+plt.title('Precision-Recall Curve')
+plt.legend(loc='best')
+plt.grid(True)
+plt.show()
+
+# Example Prediction
+new_email = "Congratulations! You've won a free trip to Paris. Claim your prize now!"
+new_email_processed = preprocess_text(new_email)
+new_email_tfidf = vectorizer.transform([new_email_processed])
+prediction = model.predict(new_email_tfidf)
+
+if prediction == 1:
+    print("The email is Spam.")
+else:
+    print("The email is Not Spam.")
